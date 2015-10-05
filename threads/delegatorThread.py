@@ -4,18 +4,11 @@ import os, time
 import threading, queue
 import socket
 
+# receives messages from client sockets, does some formatting
+# places new message into appropriate input queue for other threads
+
 class delegatorThread(threading.Thread):
-    """ A worker thread that takes directory names from a queue, finds all
-        files in them recursively and reports the result.
 
-        Input is done by placing directory names (as strings) into the
-        Queue passed in dir_q.
-
-        Output is done by placing tuples into the Queue passed in result_q.
-        Each tuple is (thread name, dirname, [list of files]).
-
-        Ask the thread to stop by calling its join() method.
-    """
     def __init__(self, client_l, auth_q, lobby_q, gamethread_l, event_q, admin_q):
         threading.Thread.__init__(self)
         self.clients = client_l
@@ -29,14 +22,11 @@ class delegatorThread(threading.Thread):
         self.start()
 
     def run(self):
-        # As long as we weren't asked to stop, try to take new tasks from the
-        # queue. The tasks are taken with a blocking 'get', so no CPU
-        # cycles are wasted while waiting.
-        # Also, 'get' is given a timeout, so stoprequest is always checked,
-        # even if there's nothing in the queue.
         while not self.stoprequest.isSet():
+            # for each client socket in list
             for cl in self.clients:
                 try:
+                    # receive is non-blocking, so move to next client if no message available
                     msg = list(cl[0].recv(1024).decode())
                     if len(msg) > 0:
                         self.events.put("{}".format(msg))

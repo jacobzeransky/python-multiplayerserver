@@ -4,6 +4,7 @@ import sys
 import subprocess
 from subprocess import Popen, CREATE_NEW_CONSOLE
 
+## test file, not working as intended
 
 with open("server.py") as f:
     code = compile(f.read(), "server.py", 'exec')

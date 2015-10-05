@@ -3,18 +3,11 @@
 import os, time
 import threading, queue
 
+# new instance created for each game
+# handles game state and communcation between players for its own game
+# receives messages from delegator thread
 class gameThread(threading.Thread):
-    """ A worker thread that takes directory names from a queue, finds all
-        files in them recursively and reports the result.
 
-        Input is done by placing directory names (as strings) into the
-        Queue passed in dir_q.
-
-        Output is done by placing tuples into the Queue passed in result_q.
-        Each tuple is (thread name, dirname, [list of files]).
-
-        Ask the thread to stop by calling its join() method.
-    """
     def __init__(self, game_id, game_q, player1, player2, event_q):
         threading.Thread.__init__(self)
         self.id = game_id
@@ -25,11 +18,13 @@ class gameThread(threading.Thread):
         self.stoprequest = threading.Event()
         self.events.put("Game starting between {} and {}".format(player1[1], player2[1]))
 
+        # initialize gamestate, determine player 1 and 2
         self.curp = 1
         self.board = "000000000"
         self.p1[0].send(str(self.id).encode())
         self.p2[0].send(str(self.id).encode())
 
+        # begin play
         msg = 'g' + str(self.board)
         self.p1[0].send(msg.encode())
         msg = 'w' + str(self.board)
@@ -38,24 +33,24 @@ class gameThread(threading.Thread):
         self.start()
         
     def run(self):
-        # As long as we weren't asked to stop, try to take new tasks from the
-        # queue. The tasks are taken with a blocking 'get', so no CPU
-        # cycles are wasted while waiting.
-        # Also, 'get' is given a timeout, so stoprequest is always checked,
-        # even if there's nothing in the queue.
         while not self.stoprequest.isSet():
             try:
+                # attempts to get most recent move message
                 pmove = self.gq.get(True, 0.05)
                 self.board = list(self.board)
                 self.board[int(pmove)] = str(self.curp)
                 self.board = ''.join(self.board)
                 self.events.put("Game {}: player {} performed move on position {}".format(self.id, self.curp, pmove))
+
+                # check if move puts board into gameover state
                 if self.gameover():
                     self.events.put("Game {}: player {} won".format(self.id, self.curp))
                     msg = 'o' + str(self.curp) + str(self.board)
                     self.p1[0].send(msg.encode())
                     self.p2[0].send(msg.encode())
                     self.join()
+                    
+                # continue play
                 else:
                     msg = 'g' + str(self.board)
                     if self.curp == 1:
@@ -73,6 +68,7 @@ class gameThread(threading.Thread):
     def join(self, timeout=None):
         self.stoprequest.set()
 
+    # check if gameboard is in game over state
     def gameover(self):
         gb = list(self.board)
         if gb.count('0') > 0:

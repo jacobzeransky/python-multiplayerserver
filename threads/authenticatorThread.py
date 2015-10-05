@@ -4,51 +4,46 @@ import os, time
 import threading, queue
 import authenticatorModule
 
+# thread that handles authentication requests pulled from the authentication queue
+
 class authenticatorThread(threading.Thread):
-    """ A worker thread that takes directory names from a queue, finds all
-        files in them recursively and reports the result.
-
-        Input is done by placing directory names (as strings) into the
-        Queue passed in dir_q.
-
-        Output is done by placing tuples into the Queue passed in result_q.
-        Each tuple is (thread name, dirname, [list of files]).
-
-        Ask the thread to stop by calling its join() method.
-    """
+    
     def __init__(self, auth_q, event_q):
         threading.Thread.__init__(self)
         self.authq = auth_q
         self.events = event_q
+        # initalize module used to check given authentication information from queue
         self.authm = authenticatorModule.authenticatorModule('db.txt', 'admins.txt', event_q)
         self.stoprequest = threading.Event()
         self.events.put("AuthenticatorThread started")
         self.start()
 
     def run(self):
-        # As long as we weren't asked to stop, try to take new tasks from the
-        # queue. The tasks are taken with a blocking 'get', so no CPU
-        # cycles are wasted while waiting.
-        # Also, 'get' is given a timeout, so stoprequest is always checked,
-        # even if there's nothing in the queue.
         while not self.stoprequest.isSet():
             try:
+                # get message from queue if available, format it
                 client, mtype, msg = self.authq.get(True, 0.05)
                 ulen = int(msg[0]) + 5
                 plen = int(msg[1]) + 4
                 uname = ''.join(msg[2:(ulen+2)])
                 upass = ''.join(msg[(ulen+2):])
+
+                # login request
                 if mtype == 0:
                     res = self.authm.authenicate(uname, upass)
                     if res == 'c':
+                        # authentication successful, check admin status
                         if self.authm.checkadminstatus(uname):
                             self.events.put("{} with {} successful as admin".format(uname, upass))
                         else:
                             self.events.put("{} with {} successful".format(uname, upass))
+                    # invalid password
                     elif res == 'i':
                         self.events.put("{} with {} unsuccessful".format(uname, upass))
+                    # user not found
                     else:
                         self.events.put("{} with {} not found".format(uname, upass))
+                # create new user request
                 else:
                     res = self.authm.createnewuser(uname, upass)
                     if res == 'e':
